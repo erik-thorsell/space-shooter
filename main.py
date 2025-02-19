@@ -5,14 +5,14 @@ import math
 
 CONFIG = {
     # GAME
-    "spawning_enabled": False,
+    "spawning_enabled": True,
 
     # SCREEN
     "screen_boundary": 30, # pixles - border
 
     # STARS
     "star_speed": 2,
-    "star_count": 25,
+    "star_count": 75,
     "star_size": 2,
     "star_color": (255, 255, 255),
 
@@ -57,13 +57,15 @@ stars = []
 
 class Star:
     def __init__(self, x, y, size, color):
+        speed = random.random()+.5
         self.x = x
         self.y = y
-        self.size = (size, size)
+        self.size = (size*speed, size*speed)
         self.color = color
+        self.speed = (speed-.25) * CONFIG["star_speed"]
 
     def draw(self):
-        self.y += CONFIG["star_speed"]
+        self.y += self.speed
         if self.y > gameSize[1]:
             self.y = 0
         screen.fill((255,255,255), (self.x, self.y, self.size[0], self.size[1]))
@@ -137,6 +139,10 @@ class Enemy:
     def _move(self):
         self.y += 50
 
+    def check_collision(self, player):
+        if (abs(self.x - player.x) < self.size/2 and abs(self.y - player.y) < self.size/2):
+            exit()
+
     def draw(self):
         if not self.alive and pygame.time.get_ticks() - self.cooldown > 100:
             self.explosion += 1
@@ -202,7 +208,7 @@ class Player:
             speed = CONFIG["projectile_speed"],
             skin = 0,
             direction = -1,
-            size = 32,
+            size = 32*1.5,
             hitbox=CONFIG["projectile_hitbox"]
         )
         self.last_shot = pygame.time.get_ticks()
@@ -300,12 +306,13 @@ while True:
     # ---------------- GAME LOGIC ---------------- #
 
     if pygame.time.get_ticks() - last_spawn > 5000 and len(enemies) == 0 and CONFIG["spawning_enabled"]:
-        for i in range(5):
+        amount = 5
+        for i in range(amount):
             Enemy(
-                x= 300+ gamePos[0] + 60*i, 
-                y=30, 
+                x= gameSize[0]/2 + gamePos[0] + 60*i - (30*amount), 
+                y= gamePos[1],
                 speed=1, 
-                skin=22, 
+                skin=11,
                 size=60
             )
         last_spawn = pygame.time.get_ticks()
@@ -330,6 +337,7 @@ while True:
     # ENEMIES
     for enemy in enemies:
         enemy.draw()
+        enemy.check_collision(player)
         if enemy.y > gameSize[1]:
             exit()
 
