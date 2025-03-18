@@ -3,6 +3,11 @@ import os
 import random
 import math
 
+# ------------------ MODULES ------------------ #
+import modules.keyboard_controller as keyboard_controller
+
+
+# ------------------ CONFIG ------------------ #
 CONFIG = {
     # GAME
     "spawning_enabled": True,
@@ -12,7 +17,7 @@ CONFIG = {
 
     # STARS
     "star_speed": 2,
-    "star_count": 75,
+    "star_count": 1500,
     "star_size": 2,
     "star_color": (255, 255, 255),
 
@@ -50,6 +55,8 @@ gamePos = ((screen_width - gameSize[0])/2, 0)
 pygame.display.set_caption('SPACE SHOOTER')
 
 clock = pygame.time.Clock()
+
+Controller = keyboard_controller.Controller()
 
 
 # ------------------ STARS ------------------ #
@@ -246,33 +253,34 @@ player = Player(
 
 
 # ------------------ KEYBINDS ------------------ #
-keybinds = { # single press keys
-    pygame.K_ESCAPE: lambda: os._exit(0),
-    pygame.K_1: lambda: player.change_skin(0),
-    pygame.K_2: lambda: player.change_skin(1),
-    pygame.K_3: lambda: player.change_skin(2),
-    pygame.K_4: lambda: player.change_skin(3),
-    pygame.K_5: lambda: player.change_skin(4)
-}
 
-movement = { # holdable keys
-    pygame.K_w: lambda: player.move("up"),
-    pygame.K_s: lambda: player.move("down"),
-    pygame.K_a: lambda: player.move("left"),
-    pygame.K_d: lambda: player.move("right"),
-    pygame.K_SPACE: player.shoot
-}
+#single press keys
+Controller.register([
+    (pygame.K_ESCAPE, lambda: os._exit(0)),
+    (pygame.K_1, lambda: player.change_skin(0)),
+    (pygame.K_2, lambda: player.change_skin(1)),
+    (pygame.K_3, lambda: player.change_skin(2)),
+    (pygame.K_4, lambda: player.change_skin(3)),
+    (pygame.K_5, lambda: player.change_skin(4))
+])
 
-keyup = { # keys that need to be released
-    pygame.K_w: player.stop_thrust,
-    pygame.K_s: player.stop_thrust,
-    pygame.K_a: player.stop_moving,
-    pygame.K_d: player.stop_moving
-}
+#movement keys, holdable
+Controller.register([
+    (pygame.K_w, lambda: player.move("up"), player.stop_thrust),
+    (pygame.K_s, lambda: player.move("down"), player.stop_thrust),
+    (pygame.K_a, lambda: player.move("left"), player.stop_moving),
+    (pygame.K_d, lambda: player.move("right"), player.stop_moving),
+    (pygame.K_SPACE, player.shoot)
+], 
+    holdable=True
+)
+
 
 x_keys = [pygame.K_a, pygame.K_d]
 
 y_keys = [pygame.K_w, pygame.K_s]
+
+Controller.register(pygame.QUIT, lambda: exit())
 
 
 last_spawn = pygame.time.get_ticks()
@@ -280,24 +288,9 @@ last_spawn = pygame.time.get_ticks()
 while True:
 
     # ------------------ EVENTS ------------------ #
-    for event in pygame.event.get():
-        match event.type:
-            case pygame.QUIT:
-                exit()
+    Controller.process_events(pygame.event.get())
 
-            case pygame.KEYDOWN:
-                if event.key in keybinds:
-                    keybinds[event.key]()
-            
-            case pygame.KEYUP:
-                if event.key in keyup:
-                    keyup[event.key]()
-    
     keys = pygame.key.get_pressed()
-    for key in movement:
-        if keys[key]:
-            movement[key]()
-            
     if all(keys[key] for key in x_keys):
         player.stop_moving()
     if all(keys[key] for key in y_keys):
