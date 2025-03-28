@@ -2,52 +2,32 @@ import pygame
 import os
 import random
 import math
+import time
 
 # ------------------ MODULES ------------------ #
 import modules.keyboard_controller as keyboard_controller
-
+import modules.entities as entities
 
 # ------------------ CONFIG ------------------ #
-CONFIG = {
-    # GAME
-    "spawning_enabled": True,
-
-    # SCREEN
-    "screen_boundary": 30, # pixles - border
-
-    # STARS
-    "star_speed": 2,
-    "star_count": 1500,
-    "star_size": 2,
-    "star_color": (255, 255, 255),
-
-    # PLAYER
-    "player_speed": 5,
-    "player_size": 50,
-    "flame_update_rate": 15, # ticks
-    "flame_thrust_rate": 100, # advance rate, how fast it becomes full flame
-    "shoot_rate": 500, # ms
-    "projectile_speed": 8,
-    "projectile_hitbox": 1,
-
-}
+import modules.config as config
+CONFIG = config.CONFIG
 
 
 # Initialize the game engine
 pygame.init()
 
 
-# ------------------ ASSETS ------------------ #
-ships_ui = pygame.image.load("./assets/ships.png")
-projectiles_ui = pygame.image.load("./assets/projectiles.png")
-misc_ui = pygame.image.load("./assets/misc.png")
-
 
 # ------------------ VARIABLES ------------------ #
-screen_width, screen_height = pygame.display.Info().current_w, pygame.display.Info().current_h
-screen = pygame.display.set_mode([screen_width, screen_height], pygame.NOFRAME) # windowed borderless
-gameSize = (screen_height*(386/513), screen_height)
-gamePos = ((screen_width - gameSize[0])/2, 0)
+CONFIG["screen_width"] = pygame.display.Info().current_w
+CONFIG["screen_height"] = pygame.display.Info().current_h
+CONFIG["screen"] = pygame.display.set_mode([CONFIG["screen_width"], CONFIG["screen_height"]], pygame.NOFRAME) # windowed borderless
+CONFIG["game_size"] = (CONFIG["screen_height"]*(386/513), CONFIG["screen_height"])
+CONFIG["game_pos"] = ((CONFIG["screen_width"] - CONFIG["game_size"][0])/2, 0)
+
+gameSize = CONFIG["game_size"]
+gamePos = CONFIG["game_pos"]
+screen = CONFIG["screen"]
 
 
 # ------------------ MISC ------------------ #
@@ -94,159 +74,9 @@ for i in range(CONFIG["star_count"]):
     )
 
 
-# ------------------ PROJECTILES ------------------ #
-projectiles = []
-
-class Projectile:
-    def __init__(self, x, y, speed, skin, direction, size, hitbox):
-        self.x = x
-        self.y = y
-        self.speed = speed
-        self.direction = direction
-        self.hitbox = hitbox
-        self.skin = pygame.transform.scale(projectiles_ui.subsurface((8*skin, 0, 8, 8)), (size, size))
-        projectiles.append(self)
-
-    def _move(self):
-        self.y += self.speed * self.direction
-
-    def check_collision(self, enemies):
-        for enemy in enemies:
-            if (self.hitbox > 0 and
-                abs(self.x - enemy.x) < self.hitbox + enemy.size/2 and abs(self.y - enemy.y) < self.hitbox + enemy.size/2):
-                projectiles.remove(self)
-                enemy.alive = False
-                break
-        
-
-    def draw(self):
-        self._move()
-        screen.blit(self.skin, (self.x, self.y))
 
 
-# ------------------ ENEMIES ------------------ #
-enemies = []
-
-class Enemy:
-    def __init__(self, x, y, speed, skin, size):
-        self.x = x
-        self.y = y
-        self.speed = speed
-        self.size = size
-        self.alive = True
-        self.cooldown = 0
-        self.explosion = 0
-
-        # SKINS: 0-35
-        row = skin // 6
-        col = skin % 6
-        self.skin = pygame.transform.scale(ships_ui.subsurface((8*4 + 8*col, 8*row, 8, 8)), (size, size))
-        enemies.append(self)
-
-    def _move(self):
-        self.y += 50
-
-    def check_collision(self, player):
-        if (abs(self.x - player.x) < self.size/2 and abs(self.y - player.y) < self.size/2):
-            exit()
-
-    def draw(self):
-        if not self.alive and pygame.time.get_ticks() - self.cooldown > 100:
-            self.explosion += 1
-            self.cooldown = pygame.time.get_ticks()
-            if self.explosion == 4:
-                enemies.remove(self)
-                return
-            self.skin = pygame.transform.scale(
-                misc_ui.subsurface((8*8 + 8*self.explosion, 6*8, 8, 8)), (self.size, self.size)
-            )
-        if pygame.time.get_ticks() - self.cooldown > 1500/self.speed:
-            self._move()
-            self.cooldown = pygame.time.get_ticks()
-        screen.blit(self.skin, (self.x, self.y))
-
-# ------------------ PLAYER ------------------ #
-class Player:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.size = (CONFIG["player_size"], CONFIG["player_size"])
-        self.speed = CONFIG["player_speed"]
-        self.direction_x = 1 # 0 = left, 1 = center, 2 = right
-        self.direction_y = 0 # 0-3 different strengths of thrust, -1 = off
-        self.skin = 0
-        self.flame_variant = 0
-        self.last_shot = 0
-        self.last_direction_change = 0
-
-    def move(self, direction):
-        if direction == "up" and self.y > (gamePos[1] + CONFIG["screen_boundary"]):
-            if pygame.time.get_ticks() - self.last_direction_change > CONFIG["flame_thrust_rate"]:
-                self.direction_y = min(3, self.direction_y + 1)
-                self.last_direction_change = pygame.time.get_ticks()
-            self.y -= self.speed
-        elif direction == "down" and self.y < (gamePos[1] + gameSize[1] - self.size[1] - CONFIG["screen_boundary"]):
-            self.direction_y = -1 # disable thrust
-            self.y += self.speed
-        elif direction == "left" and self.x > (gamePos[0] + CONFIG["screen_boundary"]):
-            self.x -= self.speed
-            self.direction_x = 0
-        elif direction == "right" and self.x < (gamePos[0] + gameSize[0] - self.size[0] - CONFIG["screen_boundary"]):
-            self.x += self.speed
-            self.direction_x = 2
-    
-    def stop_moving(self):
-        self.direction_x = 1
-
-    def stop_thrust(self):
-        self.direction_y = 0
-
-    def change_skin(self, skin):
-        skin = max(0, min(skin, 4)) # 0-4, there are 5 skins
-        self.skin = skin
-
-    def shoot(self):
-        if pygame.time.get_ticks() - self.last_shot < CONFIG["shoot_rate"]:
-            return
-        
-        Projectile(
-            x = self.x + self.size[0]/6,
-            y = self.y,
-            speed = CONFIG["projectile_speed"],
-            skin = 0,
-            direction = -1,
-            size = 32*1.5,
-            hitbox=CONFIG["projectile_hitbox"]
-        )
-        self.last_shot = pygame.time.get_ticks()
-    
-    def _animate_flame(self):
-        if pygame.time.get_ticks() % CONFIG["flame_update_rate"] != 0: return
-        if self.flame_variant >= 3:
-            self.flame_variant = 0
-        else:
-            self.flame_variant += 1
-
-    def draw(self):
-        self._animate_flame()
-        if self.direction_y != -1:
-            flame = pygame.transform.scale(
-                misc_ui.subsurface(
-                    (
-                        40 + # go to the flames part of the spritemap
-                        8*self.flame_variant + # flame variant, animation
-                        #slightly adjust the flame position based on the direction
-                        (1 if self.direction_x == 0 else 0) + # left
-                        (-1 if self.direction_x == 2 else 0), # right
-
-                        8*self.direction_y, 8, 8)), self.size
-                        )
-            screen.blit(flame, (self.x-3, self.y + self.size[1]-6))
-
-        ship = pygame.transform.scale(ships_ui.subsurface((8*self.direction_x, 8*self.skin, 8, 8)), self.size)
-        screen.blit(ship, (self.x, self.y))
-
-player = Player(
+player = entities.Player(
     x = gamePos[0] + gameSize[0]/2 - CONFIG["player_size"]/2,
     y = gamePos[1] + gameSize[1] - CONFIG["player_size"]*5
 )
@@ -284,7 +114,18 @@ Controller.register(pygame.QUIT, lambda: exit())
 
 
 last_spawn = pygame.time.get_ticks()
+
+# BACKGROUND MUSIC
+# get random file path from assets/music
+music = random.choice(os.listdir("assets/music"))
+
+pygame.mixer.music.load(f'assets/music/{music}')
+pygame.mixer.music.set_volume(100)
+# pygame.mixer.music.play(-1)
+
 # ------------------ GAME LOOP ------------------ #
+frame = 0
+last_asteroid = 0
 while True:
 
     # ------------------ EVENTS ------------------ #
@@ -298,10 +139,10 @@ while True:
 
     # ---------------- GAME LOGIC ---------------- #
 
-    if pygame.time.get_ticks() - last_spawn > 5000 and len(enemies) == 0 and CONFIG["spawning_enabled"]:
+    if pygame.time.get_ticks() - last_spawn > 5000 and len(CONFIG["enemies"]) == 0 and CONFIG["spawning_enabled"]:
         amount = 5
         for i in range(amount):
-            Enemy(
+            entities.Enemy(
                 x= gameSize[0]/2 + gamePos[0] + 60*i - (30*amount), 
                 y= gamePos[1],
                 speed=1, 
@@ -309,10 +150,12 @@ while True:
                 size=60
             )
         last_spawn = pygame.time.get_ticks()
+    
+    if pygame.time.get_ticks() - last_asteroid > 500:
+        CONFIG["asteroids"].append(entities.Asteroid(random.choice([gamePos[0]-CONFIG["asteroid_size"], gamePos[0]+gameSize[0]+CONFIG["asteroid_size"]]),random.randint(0, gameSize[1]),1))
+        last_asteroid = pygame.time.get_ticks()
 
     # ------------------ DRAWING ------------------ #
-    # clear the screen 
-    screen.fill((10, 10, 10))
 
 
     # BACKGROUND
@@ -323,12 +166,12 @@ while True:
         star.draw()
 
     # PROJECTILES
-    for projectile in projectiles:
-        projectile.check_collision(enemies)
+    for projectile in CONFIG["projectiles"]:
+        projectile.check_collision(CONFIG["enemies"])
         projectile.draw()
 
     # ENEMIES
-    for enemy in enemies:
+    for enemy in CONFIG["enemies"]:
         enemy.draw()
         enemy.check_collision(player)
         if enemy.y > gameSize[1]:
@@ -337,7 +180,19 @@ while True:
     # PLAYER
     player.draw()
 
+    # ASTEROIDS
+    for asteroid in CONFIG["asteroids"]:
+        asteroid.check_collision(player)
+        asteroid.draw()
+
+    # BLACK BORDERS
+    screen.fill((0,0,0), (0, 0, gamePos[0], CONFIG["screen_height"]))
+    screen.fill((0,0,0), (gamePos[0] + gameSize[0]-1, 0, CONFIG["screen_width"], CONFIG["screen_height"]))
+
     # update the screen
     pygame.display.flip()
 
     clock.tick(60)
+    # frame += 1
+    # if frame % 35 == 0:
+    #     time.sleep(random.randint(1,15)/5)
