@@ -3,6 +3,7 @@ import pygame
 CONFIG = {
     # GAME
     "spawning_enabled": True,
+    "show_hitboxes": False,
 
     # SCREEN
     "screen_boundary": 30, # pixles - border
@@ -23,7 +24,10 @@ CONFIG = {
     "projectile_hitbox": 1,
 
     # ASTEROIDS
+    "asteroid_spawn_rate": 750, # ms
     "asteroid_size": 48,
+    "small_asteroid_count": 10,
+    "asteroid_lifespan": 20000,
 
 
     # ASSETS

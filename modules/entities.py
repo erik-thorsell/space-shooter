@@ -3,29 +3,47 @@ import random
 import modules.config as config
 CONFIG = config.CONFIG
 
+# ------------------- COLLISION ------------------- #
+def check_collision(p1, p2, callback=None):
+    if CONFIG["show_hitboxes"]:
+        if isinstance(p1, Asteroid):
+            pygame.draw.rect(CONFIG["screen"], (255, 0, 0), p1.rect, 1)
+        else:
+            pygame.draw.rect(CONFIG["screen"], (255, 0, 0), (p1.x, p1.y, p1.size[0], p1.size[1]), 1)
+        if isinstance(p2, Asteroid):
+            pygame.draw.rect(CONFIG["screen"], (255, 0, 0), p2.rect, 1)
+        else:
+            pygame.draw.rect(CONFIG["screen"], (255, 0, 0), (p2.x, p2.y, p2.size[0], p2.size[1]), 1)
+    p1_rect = p1.rect if isinstance(p1, Asteroid) else pygame.Rect(p1.x, p1.y, p1.size[0], p1.size[1])
+    p2_rect = p2.rect if isinstance(p2, Asteroid) else pygame.Rect(p2.x, p2.y, p2.size[0], p2.size[1])
+    colliding = p1_rect.colliderect(p2_rect)
+    if colliding and callback:
+        callback(p2)
+    return colliding
+
+
 # ------------------ PROJECTILES ------------------ #
 projectiles = CONFIG["projectiles"]
 
 class Projectile:
-    def __init__(self, x, y, speed, skin, direction, size, hitbox):
+    def __init__(self, x, y, speed, skin, direction, size, hitbox, owner):
         self.x = x
         self.y = y
         self.speed = speed
         self.direction = direction
         self.hitbox = hitbox
+        self.size = (size, size)
         self.skin = pygame.transform.scale(CONFIG["projectiles_ui"].subsurface((8*skin, 0, 8, 8)), (size, size))
+        self.owner = owner
         projectiles.append(self)
 
     def _move(self):
         self.y += self.speed * self.direction
 
-    def check_collision(self, enemies):
-        for enemy in enemies:
-            if (self.hitbox > 0 and
-                abs(self.x - enemy.x) < self.hitbox + enemy.size/2 and abs(self.y - enemy.y) < self.hitbox + enemy.size/2):
-                projectiles.remove(self)
-                enemy.alive = False
-                break
+    def destroy(self, *args):
+        if self in CONFIG["projectiles"]:
+            CONFIG["projectiles"].remove(self)
+        self = None
         
 
     def draw(self):
@@ -41,7 +59,7 @@ class Enemy:
         self.x = x
         self.y = y
         self.speed = speed
-        self.size = size
+        self.size = (size, size)
         self.alive = True
         self.cooldown = 0
         self.explosion = 0
@@ -55,10 +73,6 @@ class Enemy:
     def _move(self):
         self.y += 50
 
-    def check_collision(self, player):
-        if (abs(self.x - player.x) < self.size/2 and abs(self.y - player.y) < self.size/2):
-            exit()
-
     def draw(self):
         if not self.alive and pygame.time.get_ticks() - self.cooldown > 100:
             self.explosion += 1
@@ -67,44 +81,52 @@ class Enemy:
                 enemies.remove(self)
                 return
             self.skin = pygame.transform.scale(
-                CONFIG["misc_ui"].subsurface((8*8 + 8*self.explosion, 6*8, 8, 8)), (self.size, self.size)
+                CONFIG["misc_ui"].subsurface((8*8 + 8*self.explosion, 6*8, 8, 8)), (self.size[0], self.size[1])
             )
         if pygame.time.get_ticks() - self.cooldown > 1500/self.speed:
             self._move()
             self.cooldown = pygame.time.get_ticks()
         CONFIG["screen"].blit(self.skin, (self.x, self.y))
 
+    def explode(self, projectile):
+        self.alive = False
+        projectile.destroy()
+
+
+
 # ------------------ ASTEROIDS ------------------ #
 
 class Asteroid:
-    def __init__(self, x, y, speed):
+    def __init__(self, x, y, speed, type="large"):
         self.x = x
         self.y = y
-        self.size = CONFIG["asteroid_size"]
+        self.size = (CONFIG["asteroid_size"], CONFIG["asteroid_size"]) if type == "large" else (CONFIG["asteroid_size"]//2, CONFIG["asteroid_size"]//2)
         self.time_of_birth = pygame.time.get_ticks()
         self.speed = speed
-        self.image = pygame.transform.scale(CONFIG["misc_ui"].subsurface((8, 24, 8, 8)), (self.size, self.size))
+        self.image = pygame.transform.scale(CONFIG["misc_ui"].subsurface((8, 24, 8, 8)), (self.size[0], self.size[1]))
         self.current_image = None
         self.rotation = 0
         self.direction = random.randint(-200,200)/100
         self.origin = self.x
+        self.small_direciton = random.randint(-200,200)/100
         self.rect = self.image.get_rect(center=(self.x, self.y))
+        self.type = type
         CONFIG["asteroids"].append(self)
 
     def destroy(self):
         CONFIG["asteroids"].remove(self)
-
-    def check_collision(self, player):
-        if (abs(self.x - player.x) < self.size/1.5 and abs((self.y+10) - player.y) < self.size/1.5):
-            exit()
+        self = None
 
     def draw(self):
-        if pygame.time.get_ticks() - self.time_of_birth > 10000:
+        if pygame.time.get_ticks() - self.time_of_birth > CONFIG["asteroid_lifespan"]:
             self.destroy()
             return
-        self.x += -1 if self.origin > (CONFIG["game_pos"][0]+CONFIG["game_size"][0]/2) else 1
+        if self.type == "large":
+            self.x += -1 if self.origin > (CONFIG["game_pos"][0]+CONFIG["game_size"][0]/2) else 1
+        else:
+            self.x += self.small_direciton
         self.y += self.direction
-        if self.y < -self.size or self.y > CONFIG["game_size"][1]+self.size:
+        if self.y < -self.size[0] or self.y > CONFIG["game_size"][1]+self.size[1]:
             self.destroy()
             return
         self.rotation += 1
@@ -113,6 +135,20 @@ class Asteroid:
         self.current_image = pygame.transform.rotate(self.image, self.rotation)
         self.rect = self.current_image.get_rect(center=(self.x, self.y))
         CONFIG["screen"].blit(self.current_image, self.rect)
+
+    def explode(self, projectile):
+        projectile.destroy()
+        self.destroy()
+        if self.type == "small":
+            return
+        for i in range(CONFIG["small_asteroid_count"]):
+            Asteroid(
+                x = self.x + random.randint(-self.size[0], self.size[0]),
+                y = self.y + random.randint(-self.size[0], self.size[0]),
+                speed = 1,
+                type = "small"
+            )
+
 
 
 
@@ -167,7 +203,8 @@ class Player:
             skin = 0,
             direction = -1, 
             size = 32*1.5,
-            hitbox=CONFIG["projectile_hitbox"]
+            hitbox=CONFIG["projectile_hitbox"],
+            owner = self
         )
         self.last_shot = pygame.time.get_ticks()
     
